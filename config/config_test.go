@@ -288,7 +288,6 @@ enable_proxy: true
 `)
 
 			config.Initialize(b)
-
 			Expect(config.EnablePROXY).To(Equal(true))
 		})
 
@@ -304,6 +303,13 @@ enable_proxy: true
 			Expect(config.HealthCheckUserAgent).To(Equal("HTTP-Monitor/1.1"))
 		})
 
+		It("sets the proxy forwarded proto header", func() {
+			var b = []byte(`
+force_forwarded_proto_header: https
+`)
+			config.Initialize(b)
+			Expect(config.ForceForwardedProtoHeader).To(Equal("https"))
+		})
 	})
 
 	Describe("Process", func() {

@@ -77,24 +77,25 @@ var defaultLoggingConfig = LoggingConfig{
 }
 
 type Config struct {
-	Status                   StatusConfig  `yaml:"status"`
-	Nats                     []NatsConfig  `yaml:"nats"`
-	Logging                  LoggingConfig `yaml:"logging"`
-	Port                     uint16        `yaml:"port"`
-	Index                    uint          `yaml:"index"`
-	Zone                     string        `yaml:"zone"`
-	GoMaxProcs               int           `yaml:"go_max_procs,omitempty"`
-	TraceKey                 string        `yaml:"trace_key"`
-	AccessLog                AccessLog     `yaml:"access_log"`
-	EnableAccessLogStreaming bool          `yaml:"enable_access_log_streaming"`
-	DebugAddr                string        `yaml:"debug_addr"`
-	EnablePROXY              bool          `yaml:"enable_proxy"`
-	EnableSSL                bool          `yaml:"enable_ssl"`
-	SSLPort                  uint16        `yaml:"ssl_port"`
-	SSLCertPath              string        `yaml:"ssl_cert_path"`
-	SSLKeyPath               string        `yaml:"ssl_key_path"`
-	SSLCertificate           tls.Certificate
-	SkipSSLValidation        bool `yaml:"skip_ssl_validation"`
+	Status                    StatusConfig  `yaml:"status"`
+	Nats                      []NatsConfig  `yaml:"nats"`
+	Logging                   LoggingConfig `yaml:"logging"`
+	Port                      uint16        `yaml:"port"`
+	Index                     uint          `yaml:"index"`
+	Zone                      string        `yaml:"zone"`
+	GoMaxProcs                int           `yaml:"go_max_procs,omitempty"`
+	TraceKey                  string        `yaml:"trace_key"`
+	AccessLog                 AccessLog     `yaml:"access_log"`
+	EnableAccessLogStreaming  bool          `yaml:"enable_access_log_streaming"`
+	DebugAddr                 string        `yaml:"debug_addr"`
+	EnablePROXY               bool          `yaml:"enable_proxy"`
+	EnableSSL                 bool          `yaml:"enable_ssl"`
+	SSLPort                   uint16        `yaml:"ssl_port"`
+	SSLCertPath               string        `yaml:"ssl_cert_path"`
+	SSLKeyPath                string        `yaml:"ssl_key_path"`
+	SSLCertificate            tls.Certificate
+	SkipSSLValidation         bool   `yaml:"skip_ssl_validation"`
+	ForceForwardedProtoHeader string `yaml:"force_forwarded_proto_header"`
 
 	CipherString string `yaml:"cipher_suites"`
 	CipherSuites []uint16

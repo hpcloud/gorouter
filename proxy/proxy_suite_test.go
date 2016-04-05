@@ -92,6 +92,7 @@ var _ = JustBeforeEach(func() {
 		CryptoPrev:                 cryptoPrev,
 		RouteServiceRecommendHttps: recommendHttps,
 		HealthCheckUserAgent:       "HTTP-Monitor/1.1",
+		ForceForwardedProtoHeader:  conf.ForceForwardedProtoHeader,
 	})
 
 	proxyServer, err = net.Listen("tcp", "127.0.0.1:0")
