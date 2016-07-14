@@ -69,7 +69,7 @@ func (r *AccessLogRecord) makeRecord() string {
 		extraHeaders = r.ExtraHeaders()
 	}
 
-	return fmt.Sprintf(`%s - [%s] "%s %s %s" %s %d %d "%s" "%s" %s x_forwarded_for:"%s" x_forwarded_proto:"%s" vcap_request_id:%s response_time:%s app_id:%s%s`+"\n",
+	return fmt.Sprintf(`%s - [%s] "%s %s %s" %s %d %d "%s" "%s" %s x_forwarded_for:"%s" x_forwarded_proto:"%s" vcap_request_id:%s response_time:%s app_id:%s%s endpoint:%s`+"\n",
 		r.Request.Host,
 		r.FormatStartedAt(),
 		r.Request.Method,
@@ -86,7 +86,8 @@ func (r *AccessLogRecord) makeRecord() string {
 		r.FormatRequestHeader("X-Vcap-Request-Id"),
 		responseTime,
 		appId,
-		extraHeaders)
+		extraHeaders,
+		r.RouteEndpoint.CanonicalAddr())
 }
 
 func (r *AccessLogRecord) WriteTo(w io.Writer) (int64, error) {
