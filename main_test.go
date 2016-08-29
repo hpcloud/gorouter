@@ -73,7 +73,7 @@ var _ = Describe("Router Integration", func() {
 		caCertsPath := filepath.Join("test", "assets", "certs", "uaa-ca.pem")
 		caCertsPath, err := filepath.Abs(caCertsPath)
 		Expect(err).ToNot(HaveOccurred())
-
+		cfg.LoadBalancerHealthyThreshold = 0
 		cfg.OAuth = config.OAuthConfig{
 			TokenEndpoint:     "127.0.0.1",
 			Port:              8443,
@@ -366,7 +366,7 @@ var _ = Describe("Router Integration", func() {
 		Expect(gorouterSession.Out.Contents()).To(ContainSubstring("Component Router registered successfully"))
 	})
 
-	It("has Nats connectivity", func() {
+	FIt("has Nats connectivity", func() {
 		localIP, err := localip.LocalIP()
 		Expect(err).ToNot(HaveOccurred())
 
