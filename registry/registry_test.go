@@ -629,26 +629,33 @@ var _ = Describe("RouteRegistry", func() {
 			Expect(p).ToNot(BeNil())
 		})
 
-		It("sends route metrics to the reporter", func() {
-			// r.Register("foo", &e)
-			// r.Register("fooo", &e)
+		Context("when stale threshold is less than pruning cycle", func() {
+			BeforeEach(func() {
+				configObj = config.DefaultConfig()
+				configObj.PruneStaleDropletsInterval = 50 * time.Millisecond
+				configObj.DropletStaleThreshold = 49 * time.Millisecond
+				reporter = new(fakes.FakeRouteRegistryReporter)
 
-			r.StartPruningCycle()
+				r = NewRouteRegistry(logger, configObj, reporter)
+			})
 
-			Eventually(func() int {
-				e := *fooEndpoint
-				r.Register("foo", &e)
-				r.Register("fooo", &e)
-				callArgs, _ := reporter.CaptureRouteStatsArgsForCall(0)
-				return callArgs
-			},
-				3*configObj.PruneStaleDropletsInterval,
-				5*time.Millisecond, //100 milli
-			).Should(Equal(2))
+			It("sends route metrics to the reporter", func() {
+				r.StartPruningCycle()
 
-			// totalRoutes, timeSinceLastUpdate := reporter.CaptureRouteStatsArgsForCall(0)
-			// Expect(totalRoutes).To(Equal(2))
-			// Expect(timeSinceLastUpdate).To(BeNumerically("~", 5, 5))
+				Eventually(func() int {
+					e := *fooEndpoint
+					r.Register("foo", &e)
+					r.Register("fooo", &e)
+					return reporter.CaptureRouteStatsCallCount()
+				},
+					2*configObj.PruneStaleDropletsInterval,
+					10*time.Millisecond,
+				).Should(Equal(1))
+
+				totalRoutes, timeSinceLastUpdate := reporter.CaptureRouteStatsArgsForCall(0)
+				Expect(totalRoutes).To(Equal(2))
+				Expect(timeSinceLastUpdate).To(BeNumerically("~", 5, 5))
+			})
 		})
 
 		Context("when stale threshold is greater than pruning cycle", func() {
