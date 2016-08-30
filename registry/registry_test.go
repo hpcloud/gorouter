@@ -710,10 +710,10 @@ var _ = Describe("RouteRegistry", func() {
 
 					r.SuspendPruning(func() bool { return false })
 
-					time.Sleep(configObj.PruneStaleDropletsInterval + 10*time.Millisecond)
+					time.Sleep(configObj.PruneStaleDropletsInterval)
 
-					Expect(r.NumUris()).To(Equal(totalRoutes))
-					Expect(r.NumEndpoints()).To(Equal(totalRoutes))
+					Eventually(r.NumUris).Should(Equal(0))
+					Eventually(r.NumEndpoints).Should(Equal(0))
 				})
 			})
 		})
