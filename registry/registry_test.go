@@ -630,8 +630,6 @@ var _ = Describe("RouteRegistry", func() {
 		})
 
 		It("sends route metrics to the reporter", func() {
-			r.Register("foo", fooEndpoint)
-			r.Register("fooo", fooEndpoint)
 
 			r.StartPruningCycle()
 
@@ -642,6 +640,7 @@ var _ = Describe("RouteRegistry", func() {
 				return reporter.CaptureRouteStatsCallCount()
 			},
 				2*configObj.PruneStaleDropletsInterval,
+				5*time.Millisecond, //100 milli
 			).Should(Equal(1))
 
 			totalRoutes, timeSinceLastUpdate := reporter.CaptureRouteStatsArgsForCall(0)
