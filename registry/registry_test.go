@@ -33,7 +33,7 @@ var _ = Describe("RouteRegistry", func() {
 		logger = lagertest.NewTestLogger("test")
 		configObj = config.DefaultConfig()
 		configObj.PruneStaleDropletsInterval = 50 * time.Millisecond
-		configObj.DropletStaleThreshold = 10 * time.Millisecond
+		configObj.DropletStaleThreshold = 25 * time.Millisecond
 
 		reporter = new(fakes.FakeRouteRegistryReporter)
 
@@ -528,7 +528,7 @@ var _ = Describe("RouteRegistry", func() {
 			Expect(r.NumUris()).To(Equal(1))
 
 			r.StartPruningCycle()
-			time.Sleep(configObj.PruneStaleDropletsInterval + 10*time.Millisecond)
+			time.Sleep(configObj.PruneStaleDropletsInterval + configObj.DropletStaleThreshold)
 
 			Expect(r.NumUris()).To(Equal(0))
 			r.MarshalJSON()
@@ -546,7 +546,7 @@ var _ = Describe("RouteRegistry", func() {
 			Expect(r.NumEndpoints()).To(Equal(2))
 
 			r.StartPruningCycle()
-			time.Sleep(configObj.PruneStaleDropletsInterval + 10*time.Millisecond)
+			time.Sleep(configObj.PruneStaleDropletsInterval + configObj.DropletStaleThreshold)
 
 			Expect(r.NumUris()).To(Equal(0))
 			Expect(r.NumEndpoints()).To(Equal(0))
@@ -577,7 +577,7 @@ var _ = Describe("RouteRegistry", func() {
 				}
 			}()
 			r.StartPruningCycle()
-			time.Sleep(configObj.PruneStaleDropletsInterval + 10*time.Millisecond)
+			time.Sleep(configObj.PruneStaleDropletsInterval + configObj.DropletStaleThreshold)
 
 			Expect(r.NumUris()).To(Equal(1))
 			Expect(r.NumEndpoints()).To(Equal(1))
@@ -598,7 +598,7 @@ var _ = Describe("RouteRegistry", func() {
 			Expect(r.NumEndpoints()).To(Equal(1))
 
 			r.StartPruningCycle()
-			time.Sleep(configObj.PruneStaleDropletsInterval + 10*time.Millisecond)
+			time.Sleep(configObj.PruneStaleDropletsInterval + configObj.DropletStaleThreshold)
 
 			r.Register("foo", endpoint)
 
@@ -664,6 +664,7 @@ var _ = Describe("RouteRegistry", func() {
 				Expect(r.NumUris()).To(Equal(1))
 
 				r.StartPruningCycle()
+
 				time.Sleep(configObj.PruneStaleDropletsInterval + 10*time.Millisecond)
 
 				Expect(r.NumUris()).To(Equal(1))
@@ -688,7 +689,7 @@ var _ = Describe("RouteRegistry", func() {
 
 				r.StartPruningCycle()
 				r.SuspendPruning(func() bool { return true })
-				time.Sleep(configObj.PruneStaleDropletsInterval + 10*time.Millisecond)
+				time.Sleep(configObj.PruneStaleDropletsInterval + configObj.DropletStaleThreshold)
 			})
 
 			It("does not remove any routes", func() {
