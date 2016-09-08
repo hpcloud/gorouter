@@ -177,11 +177,12 @@ func buildProxy(logger lager.Logger, c *config.Config, registry rregistry.Regist
 		RouteServiceEnabled:        c.RouteServiceEnabled,
 		RouteServiceTimeout:        c.RouteServiceTimeout,
 		RouteServiceRecommendHttps: c.RouteServiceRecommendHttps,
-		Crypto:               crypto,
-		CryptoPrev:           cryptoPrev,
-		ExtraHeadersToLog:    c.ExtraHeadersToLog,
-		HealthCheckUserAgent: c.HealthCheckUserAgent,
-		EnableZipkin:         c.Tracing.EnableZipkin,
+		Crypto:                    crypto,
+		CryptoPrev:                cryptoPrev,
+		ExtraHeadersToLog:         c.ExtraHeadersToLog,
+		HealthCheckUserAgent:      c.HealthCheckUserAgent,
+		EnableZipkin:              c.Tracing.EnableZipkin,
+		ForceForwardedProtoHeader: c.ForceForwardedProtoHeader,
 	}
 	return proxy.NewProxy(args)
 }

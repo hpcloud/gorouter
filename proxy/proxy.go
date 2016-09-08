@@ -58,6 +58,7 @@ type ProxyArgs struct {
 	Logger                     lager.Logger
 	HealthCheckUserAgent       string
 	EnableZipkin               bool
+	ForceForwardedProtoHeader  string
 }
 
 type proxy struct {
@@ -75,6 +76,7 @@ type proxy struct {
 	routeServiceRecommendHttps bool
 	healthCheckUserAgent       string
 	enableZipkin               bool
+	forceForwardedProtoHeader  string
 }
 
 func NewProxy(args ProxyArgs) Proxy {
@@ -109,6 +111,7 @@ func NewProxy(args ProxyArgs) Proxy {
 		routeServiceRecommendHttps: args.RouteServiceRecommendHttps,
 		healthCheckUserAgent:       args.HealthCheckUserAgent,
 		enableZipkin:               args.EnableZipkin,
+		forceForwardedProtoHeader:  args.ForceForwardedProtoHeader,
 	}
 
 	return p
@@ -314,7 +317,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 	roundTripper := round_tripper.NewProxyRoundTripper(backend,
 		dropsonde.InstrumentedRoundTripper(p.transport), iter, handler, after)
 
-	newReverseProxy(roundTripper, request, routeServiceArgs, p.routeServiceConfig).ServeHTTP(proxyWriter, request)
+	newReverseProxy(roundTripper, request, routeServiceArgs, p.routeServiceConfig, p.forceForwardedProtoHeader).ServeHTTP(proxyWriter, request)
 
 	accessLog.FinishedAt = time.Now()
 	accessLog.BodyBytesSent = proxyWriter.Size()
@@ -326,10 +329,11 @@ func (p *proxy) isLoadBalancerHeartbeat(request *http.Request) bool {
 
 func newReverseProxy(proxyTransport http.RoundTripper, req *http.Request,
 	routeServiceArgs route_service.RouteServiceArgs,
-	routeServiceConfig *route_service.RouteServiceConfig) http.Handler {
+	routeServiceConfig *route_service.RouteServiceConfig,
+	forceForwardedProtoHeader string) http.Handler {
 	rproxy := &httputil.ReverseProxy{
 		Director: func(request *http.Request) {
-			SetupProxyRequest(req, request, routeServiceArgs, routeServiceConfig)
+			SetupProxyRequest(req, request, routeServiceArgs, routeServiceConfig, forceForwardedProtoHeader)
 		},
 		Transport:     proxyTransport,
 		FlushInterval: 50 * time.Millisecond,
@@ -340,8 +344,12 @@ func newReverseProxy(proxyTransport http.RoundTripper, req *http.Request,
 
 func SetupProxyRequest(source *http.Request, target *http.Request,
 	routeServiceArgs route_service.RouteServiceArgs,
-	routeServiceConfig *route_service.RouteServiceConfig) {
-	if source.Header.Get("X-Forwarded-Proto") == "" {
+	routeServiceConfig *route_service.RouteServiceConfig,
+	forceForwardedProtoHeader string) {
+
+	if forceForwardedProtoHeader != "" {
+		target.Header.Set("X-Forwarded-Proto", forceForwardedProtoHeader)
+	} else if source.Header.Get("X-Forwarded-Proto") == "" {
 		scheme := "http"
 		if source.TLS != nil {
 			scheme = "https"
