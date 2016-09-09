@@ -1367,7 +1367,7 @@ var _ = Describe("Proxy", func() {
 			It("lookups the route to that specific app index and id", func() {
 				done := make(chan string)
 				// app handler for app.vcap.me
-				ln := registerHandlerWithInstanceId(r, "app.vcap.me", "", func(conn *test_util.HttpConn) {
+				ln := registerHandlerWithInstanceIdIndex(r, "app.vcap.me", "", func(conn *test_util.HttpConn) {
 					req, err := http.ReadRequest(conn.Reader)
 					Expect(err).NotTo(HaveOccurred())
 
@@ -1378,7 +1378,7 @@ var _ = Describe("Proxy", func() {
 					conn.Close()
 
 					done <- req.Header.Get("X-CF-APP-INSTANCE")
-				}, "app-1-id")
+				}, "app-1-id", "0")
 				defer ln.Close()
 
 				ln2 := registerHandlerWithInstanceId(r, "app.vcap.me", "", func(conn *test_util.HttpConn) {
@@ -1568,6 +1568,16 @@ func registerHandlerWithRouteService(reg *registry.RouteRegistry, path string, r
 	return registerHandlerWithInstanceId(reg, path, routeServiceUrl, handler, "")
 }
 
+func registerHandlerWithInstanceIdIndex(reg *registry.RouteRegistry, path string, routeServiceUrl string, handler connHandler, instanceId string, instanceIndex string) net.Listener {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	Expect(err).NotTo(HaveOccurred())
+
+	go runBackendInstance(ln, handler)
+
+	registerAddr(reg, path, routeServiceUrl, ln.Addr(), instanceId, instanceIndex)
+
+	return ln
+}
 func registerHandlerWithInstanceId(reg *registry.RouteRegistry, path string, routeServiceUrl string, handler connHandler, instanceId string) net.Listener {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	Expect(err).NotTo(HaveOccurred())

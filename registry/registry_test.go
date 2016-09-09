@@ -529,7 +529,7 @@ var _ = Describe("RouteRegistry", func() {
 			Expect(e).To(BeNil())
 		})
 
-		FIt("selects the route with the wrong app index", func() {
+		It("selects the route with the wrong app index", func() {
 			m1 := route.NewEndpoint("app-1-ID", "192.168.1.1", 1234, "", "0", nil, -1, "", modTag)
 			m2 := route.NewEndpoint("app-2-ID", "192.168.1.2", 1235, "", "0", nil, -1, "", modTag)
 
@@ -559,6 +559,16 @@ var _ = Describe("RouteRegistry", func() {
 		It("selects the route with the matching instance id", func() {
 			m1 := route.NewEndpoint("app-1-ID", "192.168.1.1", 1234, "", "0", nil, -1, "", modTag)
 			m2 := route.NewEndpoint("app-2-ID", "192.168.1.2", 1235, "", "0", nil, -1, "", modTag)
+xunc registerHandlerWithInstanceId(reg *registry.RouteRegistry, path string, routeServiceUrl string, handler connHandler, instanceId string) net.Listener {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	Expect(err).NotTo(HaveOccurred())
+
+	go runBackendInstance(ln, handler)
+
+	registerAddr(reg, path, routeServiceUrl, ln.Addr(), instanceId, "2")
+
+	return ln
+}
 
 			r.Register("bar", m1)
 			r.Register("bar", m2)

@@ -148,9 +148,10 @@ func (r *RouteRegistry) LookupWithInstance(uri route.Uri, appInstanceHeader stri
 	uri = uri.RouteKey()
 	p := r.Lookup(uri)
 	it := p.Endpoints("")
-	for i := 0; i < p.GetEndpointsCount(); i++ {
+	for i := 0; i <= p.GetEndpointsCount(); i++ {
 		endpoint := it.Next()
-		if !((endpoint.ApplicationId == appDetails[0]) && (endpoint.PrivateInstanceIndex == appDetails[1])) {
+
+		if (endpoint.ApplicationId != appDetails[0]) || (endpoint.PrivateInstanceIndex != appDetails[1]) {
 			p.Remove(endpoint)
 		}
 	}
