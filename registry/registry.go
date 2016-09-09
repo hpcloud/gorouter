@@ -17,6 +17,7 @@ type RegistryInterface interface {
 	Register(uri route.Uri, endpoint *route.Endpoint)
 	Unregister(uri route.Uri, endpoint *route.Endpoint)
 	Lookup(uri route.Uri) *route.Pool
+	LookupWithInstance(uri route.Uri, appInstanceHeader string)
 	StartPruningCycle()
 	StopPruningCycle()
 	NumUris() int
@@ -134,6 +135,26 @@ func (r *RouteRegistry) Lookup(uri route.Uri) *route.Pool {
 	r.RUnlock()
 
 	return pool
+}
+
+func (r *RouteRegistry) LookupWithInstance(uri route.Uri, appInstanceHeader string) *route.Pool {
+	r.RLock()
+	defer r.RUnlock()
+	appDetails := strings.Split(appInstanceHeader, ":")
+	if len(appDetails) != 2 {
+		return nil
+	}
+
+	uri = uri.RouteKey()
+	p := r.Lookup(uri)
+	it := p.Endpoints("")
+	for i := 0; i < p.GetEndpointsCount(); i++ {
+		endpoint := it.Next()
+		if !((endpoint.ApplicationId == appDetails[0]) && (endpoint.PrivateInstanceIndex == appDetails[1])) {
+			p.Remove(endpoint)
+		}
+	}
+	return p
 }
 
 func (r *RouteRegistry) StartPruningCycle() {

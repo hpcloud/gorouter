@@ -2,6 +2,7 @@ package router_test
 
 import (
 	"os"
+	"strings"
 
 	"code.cloudfoundry.org/gorouter/access_log"
 	"code.cloudfoundry.org/gorouter/common"
@@ -596,6 +597,46 @@ var _ = Describe("Router", func() {
 
 		resp, _ := httpConn.ReadResponse()
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	})
+
+	FIt("connects to app instance id and index present in cf-app-instance header", func() {
+		app1 := test.NewGreetApp([]route.Uri{"test1.vcap.me"}, config.Port, mbusClient, nil)
+		app1.Listen()
+
+		Eventually(func() bool {
+			return appRegistered(registry, app1)
+		}).Should(BeTrue())
+
+		time.Sleep(100 * time.Millisecond)
+
+		app2 := test.NewRepeatApp([]route.Uri{"test1.vcap.me"}, config.Port, mbusClient, nil)
+		app2.Listen()
+		Eventually(func() bool {
+			return appRegistered(registry, app2)
+		}).Should(BeTrue())
+
+		host := fmt.Sprintf("test1.vcap.me:%d", config.Port)
+		uri := fmt.Sprintf("http://%s", host)
+
+		conn, err := net.Dial("tcp", host)
+		Expect(err).ToNot(HaveOccurred())
+
+		Consistently(func() string {
+			client := httputil.NewClientConn(conn, nil)
+			req, _ := http.NewRequest("GET", uri, nil)
+			req.Body = ioutil.NopCloser(strings.NewReader("always call me"))
+
+			resp, err := client.Do(req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp).ToNot(BeNil())
+			Expect(resp.StatusCode).To(Equal(http.StatusOK))
+			req.Body.Close()
+
+			b, err := ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
+			Expect(err).ToNot(HaveOccurred())
+			return string(b)
+		}).Should(Equal("always call me"))
 	})
 
 	It("handles a /routes request", func() {

@@ -18,6 +18,7 @@ const (
 	CfInstanceIdHeader    = "X-CF-InstanceID"
 	B3TraceIdHeader       = "X-B3-TraceId"
 	B3SpanIdHeader        = "X-B3-SpanId"
+	CfAppInstance         = "X-CF-APP-INSTANCE"
 )
 
 func SetVcapRequestIdHeader(request *http.Request, logger lager.Logger) {
@@ -70,4 +71,8 @@ func SetB3TraceIdHeader(request *http.Request, logger lager.Logger) {
 	if logger != nil {
 		logger.Debug("b3-trace-id-header-set", lager.Data{B3TraceIdHeader: id})
 	}
+}
+
+func ValidateCfAppInstance(appInstanceHeader string, logger lager.Logger) bool {
+	return true
 }

@@ -514,6 +514,65 @@ var _ = Describe("RouteRegistry", func() {
 		})
 	})
 
+	Context("LookupWithInstance", func() {
+
+		It("selects the route with the wrong app id", func() {
+			m1 := route.NewEndpoint("app-1-ID", "192.168.1.1", 1234, "", "0", nil, -1, "", modTag)
+			m2 := route.NewEndpoint("app-2-ID", "192.168.1.2", 1235, "", "0", nil, -1, "", modTag)
+
+			r.Register("bar", m1)
+			r.Register("bar", m2)
+
+			Expect(r.NumUris()).To(Equal(1))
+			Expect(r.NumEndpoints()).To(Equal(2))
+			e := r.LookupWithInstance("bar", "app-1-ID")
+			Expect(e).To(BeNil())
+		})
+
+		FIt("selects the route with the wrong app index", func() {
+			m1 := route.NewEndpoint("app-1-ID", "192.168.1.1", 1234, "", "0", nil, -1, "", modTag)
+			m2 := route.NewEndpoint("app-2-ID", "192.168.1.2", 1235, "", "0", nil, -1, "", modTag)
+
+			r.Register("bar", m1)
+			r.Register("bar", m2)
+
+			Expect(r.NumUris()).To(Equal(1))
+			Expect(r.NumEndpoints()).To(Equal(2))
+			p := r.LookupWithInstance("bar", "app-2-ID:94")
+			e := p.Endpoints("")
+			nextEndpoint := e.Next()
+			Expect(nextEndpoint).To(BeNil())
+		})
+
+		It("selects the route with the wrong instance id", func() {
+			m1 := route.NewEndpoint("app-1-ID", "192.168.1.1", 1234, "", "0", nil, -1, "", modTag)
+			r.Register("bar", m1)
+
+			Expect(r.NumUris()).To(Equal(1))
+			Expect(r.NumEndpoints()).To(Equal(1))
+			p := r.LookupWithInstance("bar", "app-3-ID:0")
+			e := p.Endpoints("")
+			nextEndpoint := e.Next()
+			Expect(nextEndpoint).To(BeNil())
+
+		})
+		It("selects the route with the matching instance id", func() {
+			m1 := route.NewEndpoint("app-1-ID", "192.168.1.1", 1234, "", "0", nil, -1, "", modTag)
+			m2 := route.NewEndpoint("app-2-ID", "192.168.1.2", 1235, "", "0", nil, -1, "", modTag)
+
+			r.Register("bar", m1)
+			r.Register("bar", m2)
+			r.Register("baz", m2)
+
+			Expect(r.NumUris()).To(Equal(2))
+			Expect(r.NumEndpoints()).To(Equal(2))
+			p := r.LookupWithInstance("bar", "app-1-ID:0")
+			e := p.Endpoints("").Next()
+			Expect(e).ToNot(BeNil())
+			Expect(e.CanonicalAddr()).To(MatchRegexp("192.168.1.1:1234"))
+		})
+	})
+
 	Context("Prunes Stale Droplets", func() {
 		AfterEach(func() {
 			r.StopPruningCycle()

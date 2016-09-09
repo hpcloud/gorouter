@@ -1363,6 +1363,54 @@ var _ = Describe("Proxy", func() {
 			Expect(string(payload)).To(MatchRegexp("^test.*\n"))
 		})
 
+		FContext("when the request has X-CF-APP-INSTANCE", func() {
+			It("lookups the route to that specific app index and id", func() {
+				done := make(chan string)
+				// app handler for app.vcap.me
+				ln := registerHandlerWithInstanceId(r, "app.vcap.me", "", func(conn *test_util.HttpConn) {
+					req, err := http.ReadRequest(conn.Reader)
+					Expect(err).NotTo(HaveOccurred())
+
+					resp := test_util.NewResponse(http.StatusOK)
+					resp.Body = ioutil.NopCloser(strings.NewReader("Hellow World: App1"))
+					conn.WriteResponse(resp)
+
+					conn.Close()
+
+					done <- req.Header.Get("X-CF-APP-INSTANCE")
+				}, "app-1-id")
+				defer ln.Close()
+
+				ln2 := registerHandlerWithInstanceId(r, "app.vcap.me", "", func(conn *test_util.HttpConn) {
+					req, err := http.ReadRequest(conn.Reader)
+					Expect(err).NotTo(HaveOccurred())
+
+					resp := test_util.NewResponse(http.StatusOK)
+					resp.Body = ioutil.NopCloser(strings.NewReader("Hellow World: App2"))
+					conn.WriteResponse(resp)
+
+					conn.Close()
+
+					done <- req.Header.Get("X-CF-APP-INSTANCE")
+				}, "app-2-id")
+				defer ln2.Close()
+
+				conn := dialProxy(proxyServer)
+
+				req := test_util.NewRequest("GET", "app.vcap.me", "/chat", nil)
+				req.Header.Set("X-CF-APP-INSTANCE", "app-1-ID:2")
+
+				Consistently(func() string {
+					conn.WriteRequest(req)
+
+					var instanceID string
+					Eventually(done).Should(Receive(&instanceID))
+					_, b := conn.ReadResponse()
+					return b
+				}).Should(Equal("Hellow World: App1"))
+			})
+		})
+
 		Context("when the request is a TCP Upgrade", func() {
 			It("Logs the response time", func() {
 

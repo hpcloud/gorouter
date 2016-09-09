@@ -82,6 +82,10 @@ func (p *Pool) ContextPath() string {
 	return p.contextPath
 }
 
+func (p *Pool) GetEndpointsCount() int {
+	return len(p.endpoints)
+}
+
 // Returns true if endpoint was added or updated, false otherwise
 func (p *Pool) Put(endpoint *Endpoint) bool {
 	p.lock.Lock()
