@@ -121,6 +121,17 @@ var _ = Describe("Router", func() {
 		return resp.StatusCode
 	}
 
+	healthCheckWithEndpointReceives := func() int {
+		url := fmt.Sprintf("http://%s:%d/health", config.Ip, config.Status.Port)
+		req, _ := http.NewRequest("GET", url, nil)
+
+		client := http.Client{}
+		resp, err := client.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
 	testRouterDrain := func(config *cfg.Config, mbusClient *nats.Conn, registry *rregistry.RouteRegistry, initiateDrain func()) {
 		app := common.NewTestApp([]route.Uri{"drain.vcap.me"}, config.Port, mbusClient, nil, "")
 		blocker := make(chan bool)
@@ -436,6 +447,122 @@ var _ = Describe("Router", func() {
 				Eventually(drainDone).Should(BeClosed())
 				Eventually(clientDone).Should(BeClosed())
 			})
+		})
+	})
+
+	FContext("health check", func() {
+		var errChan chan error
+
+		BeforeEach(func() {
+			logcounter := schema.NewLogCounter()
+			proxy := proxy.NewProxy(proxy.ProxyArgs{
+				Logger:               logger,
+				EndpointTimeout:      config.EndpointTimeout,
+				Ip:                   config.Ip,
+				TraceKey:             config.TraceKey,
+				Registry:             registry,
+				Reporter:             varz,
+				AccessLogger:         &access_log.NullAccessLogger{},
+				HealthCheckUserAgent: "HTTP-Moniter/1.1",
+			})
+
+			errChan = make(chan error, 2)
+			var err error
+			config.LoadBalancerHealthyThreshold = 3 * time.Second
+			router, err = NewRouter(logger, config, proxy, mbusClient, registry, varz, logcounter, errChan)
+			Expect(err).ToNot(HaveOccurred())
+			runRouter(router)
+			Consistently(func() int {
+				return healthCheckReceives()
+			}, 100*time.Millisecond).Should(Equal(http.StatusServiceUnavailable))
+
+		})
+
+		// check for ok health
+		FIt("should return valid healthchecks ", func() {
+			app := common.NewTestApp([]route.Uri{"drain.vcap.me"}, config.Port, mbusClient, nil, "")
+			blocker := make(chan bool)
+			drainDone := make(chan struct{})
+			clientDone := make(chan struct{})
+			serviceUnavailable := make(chan bool)
+
+			app.AddHandler("/", func(w http.ResponseWriter, r *http.Request) {
+				blocker <- true
+
+				_, err := ioutil.ReadAll(r.Body)
+				defer r.Body.Close()
+				Expect(err).ToNot(HaveOccurred())
+
+				<-blocker
+
+				w.WriteHeader(http.StatusNoContent)
+			})
+
+			app.Listen()
+
+			Eventually(func() bool {
+				return appRegistered(registry, app)
+			}).Should(BeTrue())
+
+			drainWait := 1 * time.Second
+			drainTimeout := 1 * time.Second
+
+			go func() {
+				defer GinkgoRecover()
+				req, err := http.NewRequest("GET", app.Endpoint(), nil)
+				Expect(err).ToNot(HaveOccurred())
+
+				client := http.Client{}
+				resp, err := client.Do(req)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp).ToNot(BeNil())
+				defer resp.Body.Close()
+			}()
+
+			// check for ok health
+			Consistently(func() int {
+				return healthCheckReceives()
+			}, 100*time.Millisecond).Should(Equal(http.StatusOK))
+
+			// wait for app to receive request
+			<-blocker
+
+			// check drain makes gorouter returns service unavailable
+			go func() {
+				defer GinkgoRecover()
+				Eventually(func() int {
+					result := healthCheckWithEndpointReceives()
+					if result == http.StatusServiceUnavailable {
+						serviceUnavailable <- true
+					}
+					return result
+				}, 100*time.Millisecond).Should(Equal(http.StatusServiceUnavailable))
+			}()
+
+			// check that we can still connect within drainWait time
+			go func() {
+				defer GinkgoRecover()
+				<-serviceUnavailable
+				Consistently(func() int {
+					return healthCheckWithEndpointReceives()
+				}, 500*time.Millisecond).Should(Equal(http.StatusServiceUnavailable))
+			}()
+
+			// trigger drain
+			go func() {
+				defer GinkgoRecover()
+				err := router.Drain(drainWait, drainTimeout)
+				Expect(err).ToNot(HaveOccurred())
+				close(drainDone)
+			}()
+
+			Consistently(drainDone, drainTimeout/10).ShouldNot(BeClosed())
+
+			// drain in progress, continue with current request
+			blocker <- false
+
+			Eventually(drainDone).Should(BeClosed())
+			Eventually(clientDone).Should(BeClosed())
 		})
 	})
 
