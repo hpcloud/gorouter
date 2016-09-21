@@ -2,7 +2,7 @@ package proxy
 
 import (
 	"crypto/tls"
-	"io"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -60,6 +60,7 @@ type ProxyArgs struct {
 	ExtraHeadersToLog          *[]string
 	Logger                     lager.Logger
 	HealthCheckUserAgent       string
+	HeartbeatOK                *int32
 	EnableZipkin               bool
 }
 
@@ -93,7 +94,7 @@ type proxy struct {
 	accessLogger               access_log.AccessLogger
 	transport                  *http.Transport
 	secureCookies              bool
-	heartbeatOK                int32
+	heartbeatOK                *int32
 	routeServiceConfig         *route_service.RouteServiceConfig
 	extraHeadersToLog          *[]string
 	routeServiceRecommendHttps bool
@@ -126,7 +127,7 @@ func NewProxy(args ProxyArgs) Proxy {
 			TLSClientConfig:    args.TLSConfig,
 		},
 		secureCookies:              args.SecureCookies,
-		heartbeatOK:                1, // 1->true, 0->false
+		heartbeatOK:                args.HeartbeatOK, // 1->true, 0->false
 		routeServiceConfig:         routeServiceConfig,
 		extraHeadersToLog:          args.ExtraHeadersToLog,
 		routeServiceRecommendHttps: args.RouteServiceRecommendHttps,
@@ -136,7 +137,7 @@ func NewProxy(args ProxyArgs) Proxy {
 	n := negroni.New()
 	n.Use(&proxyWriterHandler{})
 	n.Use(handlers.NewAccessLog(args.AccessLogger, args.ExtraHeadersToLog))
-	n.Use(handlers.NewHealthcheck(args.HealthCheckUserAgent, &p.heartbeatOK, args.Logger))
+	n.Use(handlers.NewHealthcheck(args.HealthCheckUserAgent, p.heartbeatOK, args.Logger))
 	n.Use(handlers.NewZipkin(args.EnableZipkin, args.ExtraHeadersToLog, args.Logger))
 
 	n.UseHandler(p)
@@ -191,7 +192,7 @@ func (p *proxy) lookup(request *http.Request) *route.Pool {
 
 // Drain stops sending successful heartbeats back to the loadbalancer
 func (p *proxy) Drain() {
-	atomic.StoreInt32(&(p.heartbeatOK), 0)
+	atomic.StoreInt32(p.heartbeatOK, 0)
 }
 
 func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) {
@@ -199,7 +200,7 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 
 	alr := proxyWriter.Context().Value("AccessLogRecord")
 	if alr == nil {
-		panic("AccessLogRecord not set on context")
+		p.logger.Error("AccessLogRecord not set on context", errors.New("failed-to-access-LogRecord"))
 	}
 	accessLog := alr.(*schema.AccessLogRecord)
 
@@ -317,10 +318,6 @@ func (p *proxy) ServeHTTP(responseWriter http.ResponseWriter, request *http.Requ
 		dropsonde.InstrumentedRoundTripper(p.transport), iter, handler, after)
 
 	newReverseProxy(roundTripper, request, routeServiceArgs, p.routeServiceConfig).ServeHTTP(proxyWriter, request)
-}
-
-func (p *proxy) isLoadBalancerHeartbeat(request *http.Request) bool {
-	return request.UserAgent() == p.healthCheckUserAgent
 }
 
 func newReverseProxy(proxyTransport http.RoundTripper, req *http.Request,
@@ -484,23 +481,4 @@ func upgradeHeader(request *http.Request) string {
 	}
 
 	return ""
-}
-
-type countingReadCloser struct {
-	delegate io.ReadCloser
-	count    uint32
-}
-
-func (crc *countingReadCloser) Read(b []byte) (int, error) {
-	n, err := crc.delegate.Read(b)
-	atomic.AddUint32(&crc.count, uint32(n))
-	return n, err
-}
-
-func (crc *countingReadCloser) GetCount() int {
-	return int(atomic.LoadUint32(&crc.count))
-}
-
-func (crc *countingReadCloser) Close() error {
-	return crc.delegate.Close()
 }

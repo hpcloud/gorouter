@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -33,6 +34,7 @@ var _ = Describe("Router", func() {
 		logger     lager.Logger
 		natsRunner *test_util.NATSRunner
 		config     *cfg.Config
+		p          proxy.Proxy
 
 		mbusClient *nats.Conn
 		registry   *rregistry.RouteRegistry
@@ -216,7 +218,9 @@ var _ = Describe("Router", func() {
 		registry = rregistry.NewRouteRegistry(logger, config, new(fakes.FakeRouteRegistryReporter))
 		varz = vvarz.NewVarz(registry)
 		logcounter := schema.NewLogCounter()
-		proxy := proxy.NewProxy(proxy.ProxyArgs{
+		var healthCheck int32
+		atomic.StoreInt32(&healthCheck, 0)
+		p = proxy.NewProxy(proxy.ProxyArgs{
 			Logger:               logger,
 			EndpointTimeout:      config.EndpointTimeout,
 			Ip:                   config.Ip,
@@ -225,10 +229,11 @@ var _ = Describe("Router", func() {
 			Reporter:             varz,
 			AccessLogger:         &access_log.NullAccessLogger{},
 			HealthCheckUserAgent: "HTTP-Monitor/1.1",
+			HeartbeatOK:          &healthCheck,
 		})
 
 		errChan := make(chan error, 2)
-		router, err = NewRouter(logger, config, proxy, mbusClient, registry, varz, logcounter, errChan)
+		router, err = NewRouter(logger, config, p, mbusClient, registry, varz, &healthCheck, logcounter, errChan)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -450,11 +455,12 @@ var _ = Describe("Router", func() {
 		})
 	})
 
-	FContext("health check", func() {
+	Context("health check", func() {
 		var errChan chan error
-
 		BeforeEach(func() {
 			logcounter := schema.NewLogCounter()
+			var healthCheck int32
+			healthCheck = 0
 			proxy := proxy.NewProxy(proxy.ProxyArgs{
 				Logger:               logger,
 				EndpointTimeout:      config.EndpointTimeout,
@@ -463,27 +469,33 @@ var _ = Describe("Router", func() {
 				Registry:             registry,
 				Reporter:             varz,
 				AccessLogger:         &access_log.NullAccessLogger{},
+				HeartbeatOK:          &healthCheck,
 				HealthCheckUserAgent: "HTTP-Moniter/1.1",
 			})
 
 			errChan = make(chan error, 2)
-			var err error
-			config.LoadBalancerHealthyThreshold = 3 * time.Second
-			router, err = NewRouter(logger, config, proxy, mbusClient, registry, varz, logcounter, errChan)
+			config.LoadBalancerHealthyThreshold = 2 * time.Second
+			rtr, err := NewRouter(logger, config, proxy, mbusClient, registry, varz, &healthCheck, logcounter, errChan)
 			Expect(err).ToNot(HaveOccurred())
-			runRouter(router)
-			Consistently(func() int {
-				return healthCheckReceives()
-			}, 100*time.Millisecond).Should(Equal(http.StatusServiceUnavailable))
-
+			runRouterHealthcheck := func(r *Router) {
+				signals := make(chan os.Signal)
+				readyChan := make(chan struct{})
+				go func() {
+					r.Run(signals, readyChan)
+				}()
+				Eventually(func() int {
+					return healthCheckWithEndpointReceives()
+				}, 100*time.Millisecond).Should(Equal(http.StatusServiceUnavailable))
+				select {
+				case <-readyChan:
+				}
+			}
+			runRouterHealthcheck(rtr)
 		})
 
-		// check for ok health
 		FIt("should return valid healthchecks ", func() {
 			app := common.NewTestApp([]route.Uri{"drain.vcap.me"}, config.Port, mbusClient, nil, "")
 			blocker := make(chan bool)
-			drainDone := make(chan struct{})
-			clientDone := make(chan struct{})
 			serviceUnavailable := make(chan bool)
 
 			app.AddHandler("/", func(w http.ResponseWriter, r *http.Request) {
@@ -505,7 +517,7 @@ var _ = Describe("Router", func() {
 			}).Should(BeTrue())
 
 			drainWait := 1 * time.Second
-			drainTimeout := 1 * time.Second
+			drainTimeout := 2 * time.Second
 
 			go func() {
 				defer GinkgoRecover()
@@ -521,12 +533,17 @@ var _ = Describe("Router", func() {
 
 			// check for ok health
 			Consistently(func() int {
-				return healthCheckReceives()
-			}, 100*time.Millisecond).Should(Equal(http.StatusOK))
+				return healthCheckWithEndpointReceives()
+			}, 2*time.Second, 100*time.Millisecond).Should(Equal(http.StatusOK))
 
 			// wait for app to receive request
 			<-blocker
 
+			go func() {
+				err := router.Drain(drainWait, drainTimeout)
+				Expect(err).ToNot(HaveOccurred())
+			}()
+			blocker <- false
 			// check drain makes gorouter returns service unavailable
 			go func() {
 				defer GinkgoRecover()
@@ -536,33 +553,9 @@ var _ = Describe("Router", func() {
 						serviceUnavailable <- true
 					}
 					return result
-				}, 100*time.Millisecond).Should(Equal(http.StatusServiceUnavailable))
+				}, 100*time.Millisecond, drainTimeout).Should(Equal(http.StatusServiceUnavailable))
 			}()
 
-			// check that we can still connect within drainWait time
-			go func() {
-				defer GinkgoRecover()
-				<-serviceUnavailable
-				Consistently(func() int {
-					return healthCheckWithEndpointReceives()
-				}, 500*time.Millisecond).Should(Equal(http.StatusServiceUnavailable))
-			}()
-
-			// trigger drain
-			go func() {
-				defer GinkgoRecover()
-				err := router.Drain(drainWait, drainTimeout)
-				Expect(err).ToNot(HaveOccurred())
-				close(drainDone)
-			}()
-
-			Consistently(drainDone, drainTimeout/10).ShouldNot(BeClosed())
-
-			// drain in progress, continue with current request
-			blocker <- false
-
-			Eventually(drainDone).Should(BeClosed())
-			Eventually(clientDone).Should(BeClosed())
 		})
 	})
 
@@ -572,6 +565,8 @@ var _ = Describe("Router", func() {
 
 			BeforeEach(func() {
 				logcounter := schema.NewLogCounter()
+				var healthCheck int32
+				healthCheck = 0
 				proxy := proxy.NewProxy(proxy.ProxyArgs{
 					Logger:               logger,
 					EndpointTimeout:      config.EndpointTimeout,
@@ -581,11 +576,12 @@ var _ = Describe("Router", func() {
 					Reporter:             varz,
 					AccessLogger:         &access_log.NullAccessLogger{},
 					HealthCheckUserAgent: "HTTP-Moniter/1.1",
+					HeartbeatOK:          &healthCheck,
 				})
 
 				errChan = make(chan error, 2)
 				var err error
-				router, err = NewRouter(logger, config, proxy, mbusClient, registry, varz, logcounter, errChan)
+				router, err = NewRouter(logger, config, proxy, mbusClient, registry, varz, &healthCheck, logcounter, errChan)
 				Expect(err).ToNot(HaveOccurred())
 				runRouter(router)
 			})

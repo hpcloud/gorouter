@@ -103,8 +103,10 @@ var _ = Describe("Router", func() {
 			AccessLogger:         &access_log.NullAccessLogger{},
 			HealthCheckUserAgent: "HTTP-Monitor/1.1",
 		})
+		var healthCheck int32
+		healthCheck = 0
 		logcounter := schema.NewLogCounter()
-		router, err = NewRouter(logger, config, proxy, mbusClient, registry, varz, logcounter, nil)
+		router, err = NewRouter(logger, config, proxy, mbusClient, registry, varz, &healthCheck, logcounter, nil)
 
 		Expect(err).ToNot(HaveOccurred())
 
