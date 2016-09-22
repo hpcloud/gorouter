@@ -306,6 +306,8 @@ func (r *Router) serveHTTPS(server *http.Server, errChan chan error) error {
 			return err
 		}
 
+		server.TLSConfig = tlsConfig
+
 		r.tlsListener = tlsListener
 		if r.config.EnablePROXY {
 			r.tlsListener = &proxyproto.Listener{
