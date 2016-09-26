@@ -61,7 +61,7 @@ func (r *RouteRegistry) Register(uri route.Uri, endpoint *route.Endpoint) {
 
 	r.Lock()
 
-	routekey = uri.RouteKey()
+	routekey := uri.RouteKey()
 
 	pool, found := r.byUri.Find(routekey)
 	if !found {
