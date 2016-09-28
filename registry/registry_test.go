@@ -148,6 +148,9 @@ var _ = Describe("RouteRegistry", func() {
 				p := r.Lookup("dora.app.com/app/UP/we/Go")
 				Expect(p).ToNot(BeNil())
 				Expect(p.ContextPath()).To(Equal("/app/UP/we/Go"))
+
+				q := r.Lookup("dora.app.com/app/up/we/go")
+				Expect(q).To(Equal(p))
 			})
 		})
 
