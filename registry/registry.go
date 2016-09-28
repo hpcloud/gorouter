@@ -207,5 +207,10 @@ func parseContextPath(uri route.Uri) string {
 	if len(split) > 1 {
 		contextPath += split[1]
 	}
+
+	if idx := strings.Index(string(contextPath), "?"); idx >= 0 {
+		contextPath = contextPath[0:idx]
+	}
+
 	return contextPath
 }
